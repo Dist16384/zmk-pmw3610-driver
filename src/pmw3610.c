@@ -615,14 +615,9 @@ static int pmw3610_report_data(const struct device *dev) {
     int16_t x;
     int16_t y;
 
-#if AUTOMOUSE_LAYER > 0
-    if (input_mode == MOVE &&
-         (automouse_triggered || zmk_keymap_highest_layer_active() != AUTOMOUSE_LAYER) &&
-            (abs(x) + abs(y) > CONFIG_PMW3610_MOVEMENT_THRESHOLD)
-) {
-    activate_automouse_layer();
-}
-#endif
+    /* NOTE: Removed early AUTOMOUSE_LAYER check here because x/y were uninitialized.
+     * The automouse activation check is performed later after x/y are computed.
+     */
 
     int err = motion_burst_read(dev, buf, sizeof(buf));
     if (err) {
@@ -671,6 +666,10 @@ static int pmw3610_report_data(const struct device *dev) {
     } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
         x = -raw_y;
         y = raw_x;
+    } else {
+        /* Ensure x/y are initialized in case no orientation macro is enabled */
+        x = raw_x;
+        y = raw_y;
     }
 
     if (IS_ENABLED(CONFIG_PMW3610_INVERT_X)) {
