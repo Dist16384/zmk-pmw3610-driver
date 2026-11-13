@@ -573,21 +573,25 @@ static void pmw3610_async_init(struct k_work *work) {
 
 #define AUTOMOUSE_LAYER (DT_PROP(DT_DRV_INST(0), automouse_layer))
 #if AUTOMOUSE_LAYER > 0
-struct k_timer automouse_layer_timer;
 static bool automouse_triggered = false;
 
-static void activate_automouse_layer() {
-    automouse_triggered = true;
-    zmk_keymap_layer_activate(AUTOMOUSE_LAYER);
-    k_timer_start(&automouse_layer_timer, K_MSEC(CONFIG_PMW3610_AUTOMOUSE_TIMEOUT_MS), K_NO_WAIT);
-}
-
-static void deactivate_automouse_layer(struct k_timer *timer) {
+/*
+ * Deactivate the auto mouse layer from the system work queue instead of a k_timer.
+ * A k_timer expiry function runs in interrupt context, and ZMK's keymap/layer
+ * functions are not safe to call from there (they can race with key processing).
+ */
+static void deactivate_automouse_layer(struct k_work *work) {
     automouse_triggered = false;
     zmk_keymap_layer_deactivate(AUTOMOUSE_LAYER);
 }
 
-K_TIMER_DEFINE(automouse_layer_timer, deactivate_automouse_layer, NULL);
+static K_WORK_DELAYABLE_DEFINE(automouse_layer_work, deactivate_automouse_layer);
+
+static void activate_automouse_layer() {
+    automouse_triggered = true;
+    zmk_keymap_layer_activate(AUTOMOUSE_LAYER);
+    k_work_reschedule(&automouse_layer_work, K_MSEC(CONFIG_PMW3610_AUTOMOUSE_TIMEOUT_MS));
+}
 #endif
 
 static enum pixart_input_mode get_input_mode_for_current_layer(const struct device *dev) {
